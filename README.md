@@ -21,6 +21,8 @@ Test correct installation by executing command `sudo mn --test pingall`.
 
 ### Install sFlow-RT (and OpenJDK 11)
 ```
+sudo apt install openjdk-11-jdk
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 wget https://inmon.com/products/sFlow-RT/sflow-rt.tar.gz
 tar -xvzf sflow-rt.tar.gz
 ./sflow-rt/start.sh
