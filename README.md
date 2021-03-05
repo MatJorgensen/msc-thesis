@@ -3,18 +3,43 @@
 # Cognitive Autonomous Networks: Optimizing Quality-of-Service Using Deep Learning
 Source code for my master thesis Cognitive Autonomous Networks: Optimizing Quality-of-Service Using Deep Learning at the Technical University of Denmark.
 
-## Requirements
-```
-Todo...
-```
-
 ## Configuring VM
 All components of the project is developed in a Ubuntu 20.04 LTS virtual machine. The following is a description on how to install Mininet, sFlow-RT, ONOS, PyTorch, and how to configure the development environment.
 
-### Mininet
+### Install package dependencies
+```
+sudo apt install git zip curl unzip python python3
+```
 
-### sFlow-RT
+### Install Mininet
+```
+git clone -b 2.3.0 --single-branch git://github.com/mininet/mininet
+mininet/util/install.sh -a
+```
 
-### ONOS
+Test correct installation by executing command `sudo mn --test pingall`.
+
+### Install sFlow-RT (and OpenJDK 11)
+```
+wget https://inmon.com/products/sFlow-RT/sflow-rt.tar.gz
+tar -xvzf sflow-rt.tar.gz
+./sflow-rt/start.sh
+```
+
+### Install ONOS (and Bazelisk)
+```
+wget https://github.com/bazelbuild/bazelisk/releases/download/v1.7.5/bazelisk-linux-amd64
+chmod +x bazelisk-linux-amd64
+sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
+git clone -b 2.5.1 --single-branch https://github.com/opennetworkinglab/onos
+export ONOS_ROOT=~/onos
+source $ONOS_ROOT/tools/dev/bash_profile
+cd $ONOS_ROOT
+bazel version
+bazel build onos
+```
+
+To enable `proxyarp` and `fwd` as default ONOS apps execute the command `export ONOS_APPS=$ONOS_APPS,proxyarp,fwd`.
+
 
 ### PyTorch
