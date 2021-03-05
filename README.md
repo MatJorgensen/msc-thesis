@@ -45,3 +45,14 @@ To enable `proxyarp` and `fwd` as default ONOS apps execute the command `export 
 
 
 ### PyTorch
+
+
+### Set environmental variables (for ease of use)
+Add the following lines to `~/.profile` to export environmental variables on startup.
+
+export PATH="$PATH:/home/mbj/onos/tools/test/bin
+export ONOS_CELL=local
+export ONOS_APPS=drivers,openflow,gui2,proxyarp,fwd
+export ONOS_WEB_USER=onos
+export ONOS_ROOT=/home/student/onos
+export ONOS_WEB_PASS=rocks
