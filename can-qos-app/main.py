@@ -57,6 +57,7 @@ def calculate_metric_link_utilization():
 
 
 def calculate_flow_link_utilization():
+    # TODO: Check whether ingress and egress flows are needed...
     r = requests.get(f'{sflow}/dump/127.0.0.1/mn_bytes/json')
     metrics = r.json()
     link_utilization = {}
