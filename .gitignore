@@ -1,3 +1,7 @@
+# PyCharm
+.venv
+venv/
+
 # IntelliJ
 .idea/
 *.iml
