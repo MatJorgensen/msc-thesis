@@ -21,7 +21,7 @@ class NetworkTopology:
 
     # Generates and updates the JSON environment
     def generate_json_environment(self):
-        r = requests.get(f'{sflow}/table/TOPOLOGY/ifname,ifinoctets/json')
+        r = requests.get(f'{sflow}/table/TOPOLOGY/ifname,ifinoctets,of_dpid,of_port/json')
         data = r.json()
         interfaces = []
         # Parse JSON from sFlow-RT
@@ -30,8 +30,12 @@ class NetworkTopology:
             for subitem in item:
                 if subitem['metricName'] == 'ifname':
                     interface['interface'] = subitem['metricValue']
-                elif subitem['metricName'] == 'ifinoctets':
+                if subitem['metricName'] == 'ifinoctets':
                     interface['utilization'] = (subitem['metricValue'] * 8) / mininet_link_speed
+                if subitem['metricName'] == 'of_dpid':
+                    interface['of_dpid'] = subitem['metricValue']
+                if subitem['metricName'] == 'of_port':
+                    interface['of_port'] = subitem['metricValue']
             interfaces.append(interface)
 
         # Remove redundant switch interfaces and return
@@ -60,16 +64,18 @@ test.print_data()
 # Below is example of environment...
 """
 {
-  "interfaces":[
+  "interfaces": [
     {
-      "interface":"s1-eth1",
-      "of_switch_id":"of:0000000000000001",
-      "utilization":0.463
+      "interface": "s1-eth2",
+      "utilization": 6.670665866826634e-05,
+      "of_dpid": "0000000000000001",
+      "of_port": "2"
     },
     {
-      "interface":"s1-eth2",
-      "of_switch_id":"of:0000000000000002",
-      "utilization":0.327
+      "interface": "s2-eth1",
+      "utilization": 0.0,
+      "of_dpid": "0000000000000002",
+      "of_port": "1"
     }
   ]
 }
