@@ -4,7 +4,7 @@ import json
 import time
 
 # configure connection vm, sflow and onos
-vm_ip_address = '192.168.56.102'
+vm_ip_address = '192.168.56.103'
 sflow_port = '8008'
 onos_port = '8181'
 mininet_link_speed = 10 * 1000000
@@ -40,7 +40,8 @@ class NetworkTopology:
 
         # Remove redundant switch interfaces and return
         interfaces = [i for i in interfaces if not ('eth' not in i['interface'])]
-        return {'interfaces': interfaces}
+        self.data = {'interfaces': interfaces}
+        #return {'interfaces': interfaces}
 
     # TODO: Define function to modify flows
     def modify_flows(self):
@@ -48,7 +49,10 @@ class NetworkTopology:
 
     # Print JSON environment
     def print_data(self):
-        print(json.dumps(self.data, indent=2))
+        for interface in self.data["interfaces"]:
+            if interface["utilization"] > 0.5:
+                print(f'{interface["interface"]}: {interface["utilization"]}, {interface["of_dpid"]}:{interface["of_port"]}')
+        #print(json.dumps(self.data, indent=2))
 
     def calculate_interface_utilization(ifinoctets):
         return (ifinoctets * 8) / mininet_link_speed
@@ -58,8 +62,15 @@ class NetworkTopology:
 
 
 test = NetworkTopology()
-test.generate_json_environment()
-test.print_data()
+counter = 0
+while True:
+    print(f'------{counter}------')
+
+    test.generate_json_environment()
+    test.print_data()
+    counter += 1
+    time.sleep(1)
+
 
 # Below is example of environment...
 """
@@ -80,3 +91,5 @@ test.print_data()
   ]
 }
 """
+
+
