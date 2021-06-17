@@ -14,7 +14,7 @@ sudo apt install git zip curl unzip python python3
 ### Install Mininet
 ```
 git clone -b 2.3.0 --single-branch git://github.com/mininet/mininet
-mininet/util/install.sh -a
+PYTHON=python3 mininet/util/install.sh -nfv
 ```
 
 Test correct installation by executing command `sudo mn --test pingall`.
