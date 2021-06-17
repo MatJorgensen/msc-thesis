@@ -57,6 +57,7 @@ export PATH="$PATH:/home/mbj/onos/tools/test/bin"
 ```
 
 ## Launch Application
+The applicaiton is comprised of multiple software components. To launch it please follow the below steps to start the ONOS controller, sFlow-RT telemtry application, generate a network topology, and ...
 ### Start ONOS
 1. Navigate to the `onos/` directory by executing command `cd ~/onos`.
 2. Start ONOS by executing command `bazel run onos-local -- clean debug`.
