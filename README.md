@@ -59,7 +59,8 @@ export PATH="$PATH:/home/mbj/onos/tools/test/bin"
 ## Launch Application
 ### Start ONOS
 1. Navigate to the `onos/` directory by executing command `cd ~/onos`.
-1. Start ONOS by executing command `bazel run onos-local -- clean debug`
+2. Start ONOS by executing command `bazel run onos-local -- clean debug`.
+3. Invoke the ONOS CLI by executing command `onos localhost`.
 
 ### Start sFlow-RT
 1. Start sFlow-RT by executing command `./sflow-rt/start.sh`.
