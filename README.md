@@ -46,13 +46,23 @@ To enable `proxyarp` and `fwd` as default ONOS apps execute the command `export 
 
 ### PyTorch
 
-
 ### Set environmental variables (for ease of use)
 Add the following lines to `~/.profile` to export environmental variables on startup.
 
 ```
 export ONOS_ROOT=~/onos
-export $ONOS_ROOT/tools/dev/bash_profile
+source $ONOS_ROOT/tools/dev/bash_profile
 export ONOS_APPS="$ONOS_APPS,proxyarp,fwd"
 export PATH="$PATH:/home/mbj/onos/tools/test/bin"
 ```
+
+## Launch Application
+### Start ONOS
+Write how to start ONOS...
+
+### Start sFlow-RT
+Write how to start sFlow-RT...
+
+### Create Mininet topology
+1. Create one of the five premade test topologies using Mininet by executing the command `sudo mn --custom sflow-rt/extras/sflow.py,msc-thesis/mininet/topos.py --topo <topo> --controller onos` where `<topo>` is either of values `topo1`, `topo2`, `topo3`, `topo4`, and `topo5`. 
+2. Write how to generate data...
