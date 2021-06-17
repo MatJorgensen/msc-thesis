@@ -58,10 +58,11 @@ export PATH="$PATH:/home/mbj/onos/tools/test/bin"
 
 ## Launch Application
 ### Start ONOS
-Write how to start ONOS...
+1. Navigate to the `onos/` directory by executing command `cd ~/onos`.
+1. Start ONOS by executing command `bazel run onos-local -- clean debug`
 
 ### Start sFlow-RT
-Write how to start sFlow-RT...
+1. Start sFlow-RT by executing command `./sflow-rt/start.sh`.
 
 ### Create Mininet topology
 1. Create one of the five premade test topologies using Mininet by executing the command `sudo mn --custom sflow-rt/extras/sflow.py,msc-thesis/mininet/topos.py --topo <topo> --controller onos` where `<topo>` is either of values `topo1`, `topo2`, `topo3`, `topo4`, and `topo5`. 
