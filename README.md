@@ -14,7 +14,7 @@ sudo apt install git zip curl unzip python python3
 ### Install Mininet
 ```
 git clone -b 2.3.0 --single-branch git://github.com/mininet/mininet
-mininet/util/install.sh -a
+PYTHON=python3 mininet/util/install.sh -nfv
 ```
 
 Test correct installation by executing command `sudo mn --test pingall`.
@@ -46,13 +46,30 @@ To enable `proxyarp` and `fwd` as default ONOS apps execute the command `export 
 
 ### PyTorch
 
-
 ### Set environmental variables (for ease of use)
 Add the following lines to `~/.profile` to export environmental variables on startup.
 
 ```
 export ONOS_ROOT=~/onos
-export $ONOS_ROOT/tools/dev/bash_profile
+source $ONOS_ROOT/tools/dev/bash_profile
 export ONOS_APPS="$ONOS_APPS,proxyarp,fwd"
 export PATH="$PATH:/home/mbj/onos/tools/test/bin"
 ```
+
+## Launch Application
+The applicaiton is comprised of multiple software components. To launch it please follow the below steps to start the ONOS controller, sFlow-RT telemtry application, generate a network topology, and ...
+### Start ONOS
+1. Navigate to the `onos/` directory by executing command `cd ~/onos`.
+2. Start ONOS by executing command `bazel run onos-local -- clean debug`.
+3. Invoke the ONOS CLI by executing command `onos localhost`.
+
+### Start sFlow-RT
+1. Start sFlow-RT by executing command `./sflow-rt/start.sh`.
+
+### Create Mininet topology
+1. Create one of the five premade test topologies using Mininet by executing the command `sudo mn --custom sflow-rt/extras/sflow.py,msc-thesis/mininet/topos.py --topo <topo> --controller onos` where `<topo>` is either of values `topo1`, `topo2`, `topo3`, `topo4`, and `topo5`. 
+2. Write how to generate data...
+
+
+## Authors
+* Mathias Boss Jørgensen - [MatJorgensen](https://github.com/MatJorgensen)
