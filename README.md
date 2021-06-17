@@ -69,3 +69,7 @@ The applicaiton is comprised of multiple software components. To launch it pleas
 ### Create Mininet topology
 1. Create one of the five premade test topologies using Mininet by executing the command `sudo mn --custom sflow-rt/extras/sflow.py,msc-thesis/mininet/topos.py --topo <topo> --controller onos` where `<topo>` is either of values `topo1`, `topo2`, `topo3`, `topo4`, and `topo5`. 
 2. Write how to generate data...
+
+
+## Authors
+* Mathias Boss Jørgensen - [MatJorgensen](https://github.com/MatJorgensen)
