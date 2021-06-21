@@ -45,6 +45,14 @@ To enable `proxyarp` and `fwd` as default ONOS apps execute the command `export 
 
 
 ### PyTorch
+Before installing PyTorch make sure to install CUDA and a Nvidia driver.
+```
+sudo apt install python3-pip ubuntu-drivers-common nvidia-cuda-toolkit
+sudo apt install nvidia-driver-460
+sudo reboot
+pip3 install torch torchvision torchaudio
+```
+To verify correct installation execute commands `import torch`, `x = torch.rand(5, 3)`, and `print(x)` in the Python 3 interactive shell. To check if the GPU driver and CUDA is correctly installed execute `torch.cuda.is_available()`.
 
 ### Set environmental variables (for ease of use)
 Add the following lines to `~/.profile` to export environmental variables on startup.
