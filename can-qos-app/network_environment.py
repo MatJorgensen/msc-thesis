@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import requests
+import json
 from time import sleep, time
 from mininet.net import Mininet
 from mininet.topo import Topo
@@ -13,6 +14,7 @@ from mininet.log import setLogLevel, info
 machine_ip_address = '127.0.0.1'
 sflow_rt_port = '8008'
 onos_port = '8181'
+onos_creds = ('onos', 'rocks')  # used to authenticate with the rest api
 mininet_link_bw = 10 * 1_000_000
 
 # The ip address of sflow-rt and onos
@@ -30,6 +32,79 @@ def _parse_json(data, link_utilization=False):
     return output
 
 
+def _get_interface_names():
+    """Returns interface names."""
+    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifname/json')
+    data = r.json()
+    return _parse_json(data)
+
+
+def _get_interface_utilizations():
+    """Returns interface utilizations."""
+    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifinoctets/json')
+    data = r.json()
+    return _parse_json(data, True)
+
+
+def _get_openflow_device_id():
+    """Returns OpenFlow device IDs."""
+    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/of_dpid/json')
+    data = r.json()
+    return _parse_json(data)
+
+
+def _get_openflow_port_number():
+    """Returns OpenFlow port numbers."""
+    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/of_port/json')
+    data = r.json()
+    return _parse_json(data)
+
+
+def _filter_eth_src_dst_in_out_port_from_flows(device_id):
+    """ Returns tuple `(eth_src, eth_dst, in_port, out_port)` from existing flows."""
+    src_dst_pairs = []
+    r = requests.get(f'{onos}/onos/v1/flows/{device_id}', auth=onos_creds)
+    response = r.json()
+    for flow in response['flows']:
+        eth_src, eth_dst, in_port, out_port = ('', '', '', '')
+        if flow['appId'] == 'org.onosproject.fwd':
+            for instruction in flow['treatment']['instructions']:
+                if 'type' in instruction:  # perhaps redundant
+                    if instruction['type'] == 'OUTPUT':
+                        out_port = instruction['port']
+            for criteria in flow['selector']['criteria']:
+                if 'type' in criteria:  # perhaps redundant
+                    if criteria['type'] == 'IN_PORT':
+                        in_port = criteria['port']
+                    if criteria['type'] == 'ETH_DST':
+                        eth_dst = criteria['mac']
+                    if criteria['type'] == 'ETH_SRC':
+                        eth_src = criteria['mac']
+                if eth_src and eth_dst:
+                    src_dst_pairs.append((eth_src, eth_dst, in_port, out_port))
+    return src_dst_pairs
+
+
+def _get_alternative_paths_from_switch(src_device_id, dst_device_id):
+    """Finds an alternative shortest path from a specific switch to the destination."""
+    paths = []
+    r = requests.get(f'{onos}/onos/v1/paths/{src_device_id}/{dst_device_id}', auth=onos_creds)
+    response = r.json()
+    for path in response['paths']:
+        paths.append(path['links'][0]['src']['port'])
+    return paths
+
+
+def _get_switch_connected_to_host(host_id):
+    """Returns the list of a hosts immediate switches."""
+    locations = []
+    r = requests.get(f'{onos}/onos/v1/hosts/{host_id}', auth=onos_creds)
+    response = r.json()
+    for location in response['locations']:
+        locations.append(location['elementId'])
+    return locations
+
+
 class NetworkEnvironment:
     def __init__(self):
         setLogLevel('info')
@@ -39,44 +114,72 @@ class NetworkEnvironment:
                            controller=lambda name: RemoteController(name, ip='127.0.0.1', port=6633, protocol='tcp'))
         self.net.start()
 
-    def get_interface_names(self):
-        """Returns interface names."""
-        r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifname/json')
-        data = r.json()
-        return _parse_json(data)
+    def perform_action(self, device_id, out_port, in_port, eth_dst, eth_src):
+        app_id = '99'  # 99 is an arbitrary id used for the can-qos-app
+        header = {'Content-Type': 'application/json',
+                  'Accept': 'application/json'}  # defines the header for the request
 
-    def get_interface_utilizations(self):
-        """Returns interface utilizations."""
-        r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifinoctets/json')
-        data = r.json()
-        return _parse_json(data, True)
+        # Load the stream template for the post request
+        with open('stream_template.json') as f:
+            stream = json.load(f)
 
-    def get_openflow_device_id(self):
-        """Returns OpenFlow device IDs."""
-        r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/of_dpid/json')
-        data = r.json()
-        return _parse_json(data)
+        # Format the post request
+        stream['deviceId'] = device_id
+        stream['treatment']['instructions'][0]['port'] = out_port
+        stream['selector']['criteria'][0]['port'] = in_port
+        stream['selector']['criteria'][1]['mac'] = eth_dst
+        stream['selector']['criteria'][2]['mac'] = eth_src
 
-    def get_openflow_port_number(self):
-        """Returns OpenFlow port numbers."""
-        r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/of_port/json')
-        data = r.json()
-        return _parse_json(data)
+        # Process the post request
+        r = requests.post(f'{onos}/onos/v1/flows/{device_id}?appId={app_id}', data=json.dumps(stream), auth=onos_creds,
+                          headers=header)
+        print(r.status_code)
 
-    def select_action(self):
+    def get_available_actions(self, device_id, out_port):
         """Selects and performs a reinforcement learning action, i.e. updates a flow in ONOS."""
-        return
+        actions = []
+        alt_paths = set()
+
+        # Filter src and dst hosts from existing flows
+        action_metrics_tuples = _filter_eth_src_dst_in_out_port_from_flows(device_id)
+        for action_metrics_tuple in action_metrics_tuples:
+            if out_port == action_metrics_tuple[3]:
+                actions.append({'eth_src': action_metrics_tuple[0], 'eth_dst': action_metrics_tuple[1],
+                                'in_port': action_metrics_tuple[2], 'out_port': action_metrics_tuple[3]})
+
+        for action in actions:
+            eth_dst_switches = _get_switch_connected_to_host(f'{action["eth_dst"]}/None')
+            for eth_dst_switch in eth_dst_switches:
+                alt_paths.update(_get_alternative_paths_from_switch(device_id, eth_dst_switch))
+        alt_paths = sorted(list(alt_paths))  # list of alternative paths in ascending order
+        alt_paths.remove(out_port)  # remove current path from alternative paths
+
+        actions = [action for action in actions for _ in
+                   range(len(alt_paths))]  # create duplicate elements for alternative ports
+
+        # Updates action metrics with alternative ports
+        for i in range(len(actions) // len(alt_paths)):
+            for j in range(len(alt_paths)):
+                actions[i]['out_port'] = alt_paths[i * len(alt_paths) + j]
+        self.actions = actions
 
     def get_reward(self):
-        """Returns the reward."""
-        return
+        """Returns the reward (or penalty to be correct, since the value is negative)."""
+        reward = 0
+        for state in self.states:
+            reward += state['if_out_utilization']
+        self.reward = -reward
 
-    def get_state(self):
-        """Returns the state."""
-        return (self.get_interface_names(),
-                self.get_interface_utilizations(),
-                self.get_openflow_device_id(),
-                self.get_openflow_port_number())
+    def get_states(self):
+        states = []
+        if_out_utilizations = _get_interface_utilizations()
+        of_dpids = _get_openflow_device_id()
+        of_ports = _get_openflow_port_number()
+
+        for if_out_utilization, of_dpid, of_port in zip(if_out_utilizations.values(), of_dpids.values(),
+                                                        of_ports.values()):
+            states.append({'if_out_utilization': if_out_utilization, 'of_dpid': of_dpid, 'of_port': of_port})
+        self.states = states
 
     def generate_json_data(self, duration=1, print_result=True):
         """Requests metrics from sFlow-RT"""  # each second for a specified duration."""
@@ -115,6 +218,9 @@ class NetworkEnvironment:
         if halt_execution:
             sleep(20)  # halt execution to ensure sflow-rt has time to poll metrics
         self.net.stop()
+
+
+
 
     # Auxiliary functions used for testing basic functionality -- delete later
     def iperf(self):
@@ -173,13 +279,13 @@ class TopoTwo(Topo):
         self.addLink(s1, s3, cls=TCLink, bw=10)
         self.addLink(s2, s3, cls=TCLink, bw=10)
 
+
 class TestTopo(Topo):
     """Simple topology used to test that flows can be correctly updated using ONOS."""
 
     def build(self):
         h1 = self.addHost('h1', cls=Host, ip='10.0.0.1', mac='00:00:00:00:00:01')
         h2 = self.addHost('h2', cls=Host, ip='10.0.0.2', mac='00:00:00:00:00:02')
-        h3 = self.addHost('h3', cls=Host, ip='10.0.0.3', mac='00:00:00:00:00:03')
 
         s1 = self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow13')
         s2 = self.addSwitch('s2', cls=OVSKernelSwitch, protocols='OpenFlow13')
@@ -187,8 +293,7 @@ class TestTopo(Topo):
         s4 = self.addSwitch('s4', cls=OVSKernelSwitch, protocols='OpenFlow13')
 
         self.addLink(h1, s1, cls=TCLink, bw=10)
-        self.addLink(h2, s2, cls=TCLink, bw=10)
-        self.addLink(h3, s4, cls=TCLink, bw=10)
+        self.addLink(h2, s4, cls=TCLink, bw=10)
         self.addLink(s1, s2, cls=TCLink, bw=10)
         self.addLink(s1, s3, cls=TCLink, bw=10)
         self.addLink(s2, s4, cls=TCLink, bw=10)
