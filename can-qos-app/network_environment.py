@@ -41,7 +41,7 @@ def _get_interface_names():
 
 def _get_interface_utilizations():
     """Returns interface utilizations."""
-    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifinoctets/json')
+    r = requests.get(f'{sflow_rt}/dump/TOPOLOGY/ifoutoctets/json')
     data = r.json()
     return _parse_json(data, True)
 
@@ -90,6 +90,8 @@ def _get_alternative_paths_from_switch(src_device_id, dst_device_id):
     paths = []
     r = requests.get(f'{onos}/onos/v1/paths/{src_device_id}/{dst_device_id}', auth=onos_creds)
     response = r.json()
+    print(f'{src_device_id}, {dst_device_id}')
+    print(response)
     for path in response['paths']:
         paths.append(path['links'][0]['src']['port'])
     return paths
@@ -110,7 +112,7 @@ class NetworkEnvironment:
         setLogLevel('info')
         Cleanup.cleanup()  # clean up any running mininet network
         self.enable_sflow_rt()  # compile and run sflow-rt helper script
-        self.net = Mininet(topo=TestTopo(),
+        self.net = Mininet(topo=TopoThree(),
                            controller=lambda name: RemoteController(name, ip='127.0.0.1', port=6633, protocol='tcp'))
         self.net.start()
 
@@ -160,7 +162,7 @@ class NetworkEnvironment:
         # Updates action metrics with alternative ports
         for i in range(len(actions) // len(alt_paths)):
             for j in range(len(alt_paths)):
-                actions[i]['out_port'] = alt_paths[i * len(alt_paths) + j]
+                actions[i * len(alt_paths) + j]['out_port'] = alt_paths[j]
         self.actions = actions
 
     def get_reward(self):
@@ -219,9 +221,6 @@ class NetworkEnvironment:
             sleep(20)  # halt execution to ensure sflow-rt has time to poll metrics
         self.net.stop()
 
-
-
-
     # Auxiliary functions used for testing basic functionality -- delete later
     def iperf(self):
         h1, h2 = self.net.get('h1', 'h2')
@@ -231,20 +230,78 @@ class NetworkEnvironment:
         """Starts the Mininet CLI."""
         CLI(self.net)
 
-    def my_test(self, duration=30):
+    def test_one(self, duration=30):
         """Generates TCP traffic between a client host h1 and server host h2."""
         h1, h2 = self.net.get('h1', 'h2')
-        info(f'*** Starting iPerf server\n')
+        info(f'*** Starting iperf server\n')
         h1.cmd('iperf -s &')
         sleep(1)  # sleep to prevent connection error using iperf
         info(f'*** Generating traffic\n')
-        h2.cmd(f'iperf -c {h1.IP()} -t{duration} &')
-        # sleep(duration)  # wait for iperf to finish
-        info(f'*** Test executing in background\n')
+        h2.cmd(f'iperf -c {h1.IP()} -b 10m -t{duration} &')
+        info(f'*** Test running as background task\n')
+        sleep(9)  # halt execution to wait for sflow-rt to poll metrics
+
+    def test_two(self, duration=30):
+        """Generates TCP traffic between a client host h1 and a server host h2."""
+        h1, h2 = self.net.get('h1', 'h2')
+        info(f'*** Starting iperf server\n')
+        h2.cmd('iperf -s &')
+        sleep(1)  # sleep to prevent connection error using iperf
+        info('*** Generating traffic\n')
+        h1.cmd(f'iperf -c {h2.IP()} -b 10m -t {duration} &')
+        info(f'*** Test running as background task\n')
+        sleep(9)  # halt execution to wait for sflow-rt to poll metrics
+
+    def test_three(self, duration=30):
+        """Generates TCP traffic between four client hosts h1, h3, respectively, and two server hosts h2 and h4."""
+        h1, h2, h3, h4 = self.net.get('h1', 'h2', 'h3', 'h4')
+        info(f'*** Starting iperf servers\n')
+        h2.cmd('iperf -s &')
+        h4.cmd('iperf -s &')
+        sleep(1)  # sleep to prevent connection error using iperf
+        info('*** Generating traffic\n')
+        h1.cmd(f'iperf -c {h4.IP()} -b 5m -t {duration} &')
+        h3.cmd(f'iperf -c {h2.IP()} -b 5m -t {duration} &')
+        info(f'*** Test running as background task\n')
+        sleep(9)  # halt execution to wait for sflow-rt to poll metrics
+
+    def test_four(self, duration=30):
+        """Generates TCP and UDP traffic between four client hosts, h1, h3, h5, and h6, respectively, and two server hosts h2 and h4."""
+        h1, h2, h3, h4, h5, h6 = self.net.get('h1', 'h2', 'h3', 'h4', 'h5', 'h6')
+        info(f'*** Starting iperf servers\n')
+        h2.cmd('iperf -s &')
+        h4.cmd('iperf -s &')
+        sleep(1)  # sleep to prevent connection error using iperf
+        info('*** Generating traffic\n')
+        h1.cmd(f'iperf -c {h4.IP()} -b 10m -t {duration} &')
+        h3.cmd(f'iperf -c {h2.IP()} -b 10m -t {duration} &')
+        h5.cmd(f'iperf -c {h4.IP()} -b 10m -t {duration} &')
+        h6.cmd(f'iperf -c {h4.IP()} -b 10m -t {duration} &')
+        info(f'*** Test running as background task\n')
         sleep(9)  # halt execution to wait for sflow-rt to poll metrics
 
 
 # Mininet classes and functions
+class TestTopo(Topo):
+    """Simple topology used to test that flows can be correctly updated using ONOS."""
+
+    def build(self):
+        h1 = self.addHost('h1', cls=Host, ip='10.0.0.1', mac='00:00:00:00:00:01')
+        h2 = self.addHost('h2', cls=Host, ip='10.0.0.2', mac='00:00:00:00:00:02')
+
+        s1 = self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s2 = self.addSwitch('s2', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s3 = self.addSwitch('s3', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s4 = self.addSwitch('s4', cls=OVSKernelSwitch, protocols='OpenFlow13')
+
+        self.addLink(h1, s1, cls=TCLink, bw=10)
+        self.addLink(h2, s4, cls=TCLink, bw=10)
+        self.addLink(s1, s2, cls=TCLink, bw=10)
+        self.addLink(s1, s3, cls=TCLink, bw=10)
+        self.addLink(s2, s4, cls=TCLink, bw=10)
+        self.addLink(s3, s4, cls=TCLink, bw=10)
+
+
 class TopoOne(Topo):
     """Basic topology used to implement and test correct functionality of sFlow-RT."""
 
@@ -261,26 +318,6 @@ class TopoOne(Topo):
 
 
 class TopoTwo(Topo):
-    """Simple topology used to test that flows can be correctly updated using ONOS."""
-
-    def build(self):
-        h1 = self.addHost('h1', cls=Host, ip='10.0.0.1', mac='00:00:00:00:00:01')
-        h2 = self.addHost('h2', cls=Host, ip='10.0.0.2', mac='00:00:00:00:00:02')
-        h3 = self.addHost('h3', cls=Host, ip='10.0.0.3', mac='00:00:00:00:00:03')
-
-        s1 = self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow13')
-        s2 = self.addSwitch('s2', cls=OVSKernelSwitch, protocols='OpenFlow13')
-        s3 = self.addSwitch('s3', cls=OVSKernelSwitch, protocols='OpenFlow13')
-
-        self.addLink(h1, s1, cls=TCLink, bw=10)
-        self.addLink(h2, s1, cls=TCLink, bw=10)
-        self.addLink(h3, s2, cls=TCLink, bw=10)
-        self.addLink(s1, s2, cls=TCLink, bw=10)
-        self.addLink(s1, s3, cls=TCLink, bw=10)
-        self.addLink(s2, s3, cls=TCLink, bw=10)
-
-
-class TestTopo(Topo):
     """Simple topology used to test that flows can be correctly updated using ONOS."""
 
     def build(self):
@@ -315,17 +352,11 @@ class TopoThree(Topo):
         s4 = self.addSwitch('s4', cls=OVSKernelSwitch, protocols='OpenFlow13')
 
         self.addLink(h1, s1, cls=TCLink, bw=10)
-        self.addLink(h1, s2, cls=TCLink, bw=10)
         self.addLink(h2, s1, cls=TCLink, bw=10)
-        self.addLink(h2, s2, cls=TCLink, bw=10)
-        self.addLink(h3, s3, cls=TCLink, bw=10)
         self.addLink(h3, s4, cls=TCLink, bw=10)
-        self.addLink(h4, s3, cls=TCLink, bw=10)
         self.addLink(h4, s4, cls=TCLink, bw=10)
         self.addLink(s1, s2, cls=TCLink, bw=10)
         self.addLink(s1, s3, cls=TCLink, bw=10)
-        self.addLink(s1, s4, cls=TCLink, bw=10)
-        self.addLink(s2, s3, cls=TCLink, bw=10)
         self.addLink(s2, s4, cls=TCLink, bw=10)
         self.addLink(s3, s4, cls=TCLink, bw=10)
 
@@ -334,8 +365,37 @@ class TopoFour(Topo):
     """An advanced topology used to train and test the functionality of the CAN."""
 
     def build(self):
-        return
-        # TODO: Define topology
+        h1 = self.addHost('h1', cls=Host, ip='10.0.0.1', mac='00:00:00:00:00:01')
+        h2 = self.addHost('h2', cls=Host, ip='10.0.0.2', mac='00:00:00:00:00:02')
+        h3 = self.addHost('h3', cls=Host, ip='10.0.0.3', mac='00:00:00:00:00:03')
+        h4 = self.addHost('h4', cls=Host, ip='10.0.0.4', mac='00:00:00:00:00:04')
+        h5 = self.addHost('h5', cls=Host, ip='10.0.0.5', mac='00:00:00:00:00:05')
+        h6 = self.addHost('h6', cls=Host, ip='10.0.0.6', mac='00:00:00:00:00:06')
+
+        s1 = self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s2 = self.addSwitch('s2', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s3 = self.addSwitch('s3', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s4 = self.addSwitch('s4', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s5 = self.addSwitch('s5', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s6 = self.addSwitch('s6', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s7 = self.addSwitch('s7', cls=OVSKernelSwitch, protocols='OpenFlow13')
+        s8 = self.addSwitch('s8', cls=OVSKernelSwitch, protocols='OpenFlow13')
+
+        self.addLink(h1, s1, cls=TCLink, bw=10)
+        self.addLink(h2, s1, cls=TCLink, bw=10)
+        self.addLink(h3, s5, cls=TCLink, bw=10)
+        self.addLink(h4, s5, cls=TCLink, bw=10)
+        self.addLink(h5, s7, cls=TCLink, bw=10)
+        self.addLink(h6, s8, cls=TCLink, bw=10)
+        self.addLink(s1, s2, cls=TCLink, bw=10)
+        self.addLink(s1, s3, cls=TCLink, bw=10)
+        self.addLink(s2, s4, cls=TCLink, bw=10)
+        self.addLink(s3, s4, cls=TCLink, bw=10)
+        self.addLink(s4, s5, cls=TCLink, bw=10)
+        self.addLink(s4, s7, cls=TCLink, bw=10)
+        self.addLink(s5, s6, cls=TCLink, bw=10)
+        self.addLink(s6, s7, cls=TCLink, bw=10)
+        self.addLink(s7, s8, cls=TCLink, bw=10)
 
 
 class ONOSController(RemoteController):
@@ -347,72 +407,12 @@ class ONOSController(RemoteController):
         self.protocol = 'tcp'
 
 
-def test_one(net, time=30):
-    """Generates TCP traffic between a client host h1 and server host h2."""
-    h1, h2 = net.get('h1', 'h2')
-    info(f'*** Starting iPerf server\n')
-    h1.cmd('iperf -s &')
-    sleep(1)  # sleep to prevent connection error using iperf
-    info(f'*** Generating traffic\n')
-    h2.cmd(f'iperf -c {h1.IP()} -t{time}')
-    # h2.sendCmd(f'iperf -c {h1.IP()} -t{time}')
-    info(f'*** Generated traffic\n')
-    # info(h2.waitOutput())
-
-
-def test_two(net, time=30):
-    """Generates TCP traffic between two client hosts h1 and h2, respectively, and a server host h3."""
-    h1, h2, h3 = net.get('h1', 'h2', 'h3')
-    info(f'*** Starting iPerf server\n')
-    h3.cmd('iperf -s &')
-    sleep(1)  # sleep to prevent connection error using iperf
-    info('*** Generating traffic\n')
-    h1.sendCmd(f'iperf -c {h3.IP()} -t {time}')
-    h2.sendCmd(f'iperf -c {h3.IP()} -t {time}')
-    for h in (h1, h2):
-        info(h.waitOutput())
-
-
-def test_three(net, time=30):
-    """Generates TCP traffic between four client hosts h1, h2, h4, and h5, respectively, and two server hosts h3 and h6."""
-    h1, h2, h3, h4, h5, h6 = net.get('h1', 'h2', 'h3', 'h4', 'h5', 'h6')
-    info(f'*** Starting iPerf servers\n')
-    h3.cmd('iperf -s &')
-    h6.cmd('iperf -s &')
-    sleep(1)  # sleep to prevent connection error using iperf
-    info('*** Generating traffic\n')
-    h1.sendCmd(f'iperf -c {h6.IP()} -t {time}')
-    h2.sendCmd(f'iperf -c {h6.IP()} -t {time}')
-    h4.sendCmd(f'iperf -c {h3.IP()} -t {time}')
-    h5.sendCmd(f'iperf -c {h3.IP()} -t {time}')
-    for h in (h1, h2, h4, h5):
-        info(h.waitOutput())
-
-
-def test_four(net):
-    """Generates TCP traffic..."""
-    # TODO: Define traffic pattern
-    return
-
-
-def test_five(net):
-    """Generates random TCP and UDP traffic, mimicking a real-world traffic pattern."""
-    # TODO: Define traffic pattern
-    return
-
-
 topos = {'topo1': TopoOne,
          'topo2': TopoTwo,
          'topo3': TopoThree,
          'topo4': TopoFour}
 
 controllers = {'onos': ONOSController}
-
-tests = {'test1': test_one,
-         'test2': test_two,
-         'test3': test_three,
-         'test4': test_four,
-         'test5': test_five}
 
 if __name__ == 'mininet_topologies':
     setLogLevel('info')
