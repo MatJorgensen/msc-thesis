@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from matplotlib import pyplot as plt
 
+# TODO: Write data to files used to generate plots
+
 
 # Auxiliary functions used to generates plots
 def generate_link_utilization_plot(json_data, threshold=0.25):

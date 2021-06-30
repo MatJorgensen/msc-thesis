@@ -90,8 +90,6 @@ def _get_alternative_paths_from_switch(src_device_id, dst_device_id):
     paths = []
     r = requests.get(f'{onos}/onos/v1/paths/{src_device_id}/{dst_device_id}', auth=onos_creds)
     response = r.json()
-    print(f'{src_device_id}, {dst_device_id}')
-    print(response)
     for path in response['paths']:
         paths.append(path['links'][0]['src']['port'])
     return paths
@@ -152,7 +150,8 @@ class NetworkEnvironment:
         for action in actions:
             eth_dst_switches = _get_switch_connected_to_host(f'{action["eth_dst"]}/None')
             for eth_dst_switch in eth_dst_switches:
-                alt_paths.update(_get_alternative_paths_from_switch(device_id, eth_dst_switch))
+                if eth_dst_switch != device_id:
+                    alt_paths.update(_get_alternative_paths_from_switch(device_id, eth_dst_switch))
         alt_paths = sorted(list(alt_paths))  # list of alternative paths in ascending order
         alt_paths.remove(out_port)  # remove current path from alternative paths
 
@@ -183,31 +182,6 @@ class NetworkEnvironment:
             states.append({'if_out_utilization': if_out_utilization, 'of_dpid': of_dpid, 'of_port': of_port})
         self.states = states
 
-    def generate_json_data(self, duration=1, print_result=True):
-        """Requests metrics from sFlow-RT"""  # each second for a specified duration."""
-        end_time = time() + duration
-        while time() < end_time:
-            r = requests.get(f'{sflow_rt}/table/TOPOLOGY/ifname,ifinoctets,of_dpid,of_port/json')
-            data = r.json()
-            interfaces = []
-            for item in data:
-                interface = {}
-                for subitem in item:
-                    if subitem['metricName'] == 'ifname':
-                        interface['interface_name'] = subitem['metricValue']
-                    if subitem['metricName'] == 'ifinoctets':
-                        interface['utilization'] = (subitem['metricValue'] * 8) / mininet_link_bw
-                    if subitem['metricName'] == 'of_dpid':
-                        interface['of_dpid'] = subitem['metricValue']
-                    if subitem['metricName'] == 'of_port':
-                        interface['of_port'] = subitem['metricValue']
-                interfaces.append(interface)
-            self.json_data = interfaces
-            if print_result:
-                print(self.json_data)
-            # TODO: Write 'json_data' to log file
-            sleep(1)  # halt execution for a second
-
     def enable_sflow_rt(self, path_to_script='../../sflow-rt/extras/sflow.py'):
         """Enables sFlow-RT by executing helper script sflow.py."""
         with open(path_to_script, 'rb') as sflow_rt_script:
@@ -220,15 +194,6 @@ class NetworkEnvironment:
         if halt_execution:
             sleep(20)  # halt execution to ensure sflow-rt has time to poll metrics
         self.net.stop()
-
-    # Auxiliary functions used for testing basic functionality -- delete later
-    def iperf(self):
-        h1, h2 = self.net.get('h1', 'h2')
-        self.net.iperf((h1, h2))
-
-    def cli(self):
-        """Starts the Mininet CLI."""
-        CLI(self.net)
 
     def test_one(self, duration=30):
         """Generates TCP traffic between a client host h1 and server host h2."""
@@ -280,28 +245,17 @@ class NetworkEnvironment:
         info(f'*** Test running as background task\n')
         sleep(9)  # halt execution to wait for sflow-rt to poll metrics
 
+    # Auxiliary functions used for testing basic functionality -- delete later
+    def iperf(self):
+        h1, h2 = self.net.get('h1', 'h2')
+        self.net.iperf((h1, h2))
+
+    def cli(self):
+        """Starts the Mininet CLI."""
+        CLI(self.net)
+
 
 # Mininet classes and functions
-class TestTopo(Topo):
-    """Simple topology used to test that flows can be correctly updated using ONOS."""
-
-    def build(self):
-        h1 = self.addHost('h1', cls=Host, ip='10.0.0.1', mac='00:00:00:00:00:01')
-        h2 = self.addHost('h2', cls=Host, ip='10.0.0.2', mac='00:00:00:00:00:02')
-
-        s1 = self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow13')
-        s2 = self.addSwitch('s2', cls=OVSKernelSwitch, protocols='OpenFlow13')
-        s3 = self.addSwitch('s3', cls=OVSKernelSwitch, protocols='OpenFlow13')
-        s4 = self.addSwitch('s4', cls=OVSKernelSwitch, protocols='OpenFlow13')
-
-        self.addLink(h1, s1, cls=TCLink, bw=10)
-        self.addLink(h2, s4, cls=TCLink, bw=10)
-        self.addLink(s1, s2, cls=TCLink, bw=10)
-        self.addLink(s1, s3, cls=TCLink, bw=10)
-        self.addLink(s2, s4, cls=TCLink, bw=10)
-        self.addLink(s3, s4, cls=TCLink, bw=10)
-
-
 class TopoOne(Topo):
     """Basic topology used to implement and test correct functionality of sFlow-RT."""
 
